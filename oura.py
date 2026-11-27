@@ -18,7 +18,7 @@ from pathlib import Path
 AUTHORIZE_URL = "https://cloud.ouraring.com/oauth/authorize"
 TOKEN_URL = "https://api.ouraring.com/oauth/token"
 API_URL = "https://api.ouraring.com/v2/usercollection"
-SCOPES = "personal daily"
+SCOPES = "email personal daily heartrate workout tag session spo2 heart_health"
 
 ROOT = Path(__file__).parent
 TOKENS_FILE = ROOT / "tokens.json"
@@ -43,6 +43,7 @@ def post_form(url, data):
 
 def save_tokens(tokens):
     tokens["expires_at"] = time.time() + tokens.get("expires_in", 0)
+    tokens["requested_scope"] = SCOPES
     TOKENS_FILE.write_text(json.dumps(tokens, indent=2))
     return tokens
 
@@ -57,7 +58,7 @@ def wait_for_code(redirect_uri):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
-            self.wfile.write("Готово, можно закрыть вкладку.".encode())
+            self.wfile.write("Ferdig, du kan lukke fanen.".encode())
 
         def log_message(self, *args):
             pass
@@ -79,15 +80,15 @@ def login(env):
         "scope": SCOPES,
         "state": state,
     })
-    print("Открываю браузер для входа в Oura...")
-    print("Если браузер не открылся, перейдите по ссылке:\n" + url)
+    print("Åpner nettleseren for innlogging i Oura...")
+    print("Hvis nettleseren ikke åpnet seg, gå til lenken:\n" + url)
     webbrowser.open(url)
 
     params = wait_for_code(env["OURA_REDIRECT_URI"])
     if "error" in params:
-        raise SystemExit("Oura вернула ошибку: " + params["error"][0])
+        raise SystemExit("Oura returnerte en feil: " + params["error"][0])
     if params.get("state", [None])[0] != state:
-        raise SystemExit("Неверный state в ответе, авторизация прервана.")
+        raise SystemExit("Ugyldig state i svaret, innloggingen ble avbrutt.")
 
     return save_tokens(post_form(TOKEN_URL, {
         "grant_type": "authorization_code",
@@ -111,6 +112,8 @@ def get_access_token(env):
     if not TOKENS_FILE.exists():
         return login(env)["access_token"]
     tokens = json.loads(TOKENS_FILE.read_text())
+    if tokens.get("requested_scope") != SCOPES:
+        return login(env)["access_token"]  # scopes changed, user must approve again
     if time.time() > tokens.get("expires_at", 0) - 60:
         try:
             tokens = refresh(env, tokens)
@@ -139,7 +142,7 @@ def main():
     sleep = api_get(token, "daily_sleep",
                     start_date=(today - timedelta(days=7)).isoformat(),
                     end_date=today.isoformat())
-    print("\nDaily sleep score, последние 7 дней:")
+    print("\nSøvnscore de siste 7 dagene:")
     for day in sleep.get("data", []):
         print(f"  {day['day']}: {day.get('score')}")
 
