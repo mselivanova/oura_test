@@ -1,8 +1,7 @@
 """Minimal Oura API v2 client: OAuth2 login via localhost and a first data request.
 
 Usage:
-    cp .env.example .env   # fill in client id/secret from the Oura developer portal
-    python3 oura.py
+    python3 oura.py   # requires .env with client id/secret, see README.md
 """
 import json
 import secrets
